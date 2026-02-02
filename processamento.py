@@ -51,3 +51,12 @@ cadastro["CNPJ"] = cadastro["CNPJ"].astype(str)
 cadastro = cadastro.drop_duplicates(subset="CNPJ")
 
 # ==========================
+# 4. Enriquecimento (JOIN)
+# ==========================
+df = df.merge(
+    cadastro[["CNPJ", "RegistroANS", "Modalidade", "UF"]],
+    on="CNPJ",
+    how="left"
+)
+
+# ==========================
