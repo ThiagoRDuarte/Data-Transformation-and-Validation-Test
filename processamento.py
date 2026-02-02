@@ -1,88 +1,90 @@
 import pandas as pd
-import re
-import numpy as np
+import os
 
-# ==========================
-# Função de validação de CNPJ
-# ==========================
-def validar_cnpj(cnpj):
-    cnpj = re.sub(r'\D', '', str(cnpj))
+# =========================
+# Configuração de diretório
+# =========================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    if len(cnpj) != 14 or cnpj == cnpj[0] * 14:
-        return False
+# =========================
+# 1. Leitura do consolidado de despesas
+# =========================
+df = pd.read_csv(
+    os.path.join(BASE_DIR, "consolidado_despesas.csv"),
+    sep=";",
+    encoding="latin1"
+)
 
-    def calcula_digito(cnpj, pesos):
-        soma = sum(int(d) * p for d, p in zip(cnpj, pesos))
-        resto = soma % 11
-        return 0 if resto < 2 else 11 - resto
-
-    digito1 = calcula_digito(cnpj[:12], [5,4,3,2,9,8,7,6,5,4,3,2])
-    digito2 = calcula_digito(cnpj[:13], [6,5,4,3,2,9,8,7,6,5,4,3,2])
-
-    return cnpj[-2:] == f"{digito1}{digito2}"
-
-# ==========================
-# 1. Leitura do CSV consolidado
-# ==========================
-df = pd.read_csv("consolidado_despesas.csv")
-
+# Garantir tipo correto
 df["CNPJ"] = df["CNPJ"].astype(str)
-df["ValorDespesas"] = pd.to_numeric(df["ValorDespesas"], errors="coerce")
 
-# ==========================
-# 2. Validações de dados
-# ==========================
-df = df[df["CNPJ"].apply(validar_cnpj)]
-df = df[df["ValorDespesas"] > 0]
-df = df[df["RazaoSocial"].notna() & (df["RazaoSocial"].str.strip() != "")]
-
-# ==========================
-# 3. Leitura dos dados cadastrais
-# ==========================
+# =========================
+# 2. Leitura do cadastro das operadoras (ANS)
+# =========================
 cadastro = pd.read_csv(
-    "operadoras_ativas.csv",
+    os.path.join(BASE_DIR, "operadoras_ativas.csv"),
     sep=";",
     encoding="latin1"
 )
 
 cadastro["CNPJ"] = cadastro["CNPJ"].astype(str)
-
-# Remove duplicidades mantendo o primeiro registro
 cadastro = cadastro.drop_duplicates(subset="CNPJ")
 
-# ==========================
-# 4. Enriquecimento (JOIN)
-# ==========================
+# =========================
+# 3. Enriquecimento dos dados (MERGE)
+# =========================
 df = df.merge(
-    cadastro[["CNPJ", "RegistroANS", "Modalidade", "UF"]],
+    cadastro[["CNPJ", "RazaoSocial", "RegistroANS", "Modalidade", "UF"]],
     on="CNPJ",
     how="left"
 )
 
-# ==========================
-# 5. Agregações
-# ==========================
-df_agregado = (
-    df.groupby(["RazaoSocial", "UF"])
-    .agg(
-        TotalDespesas=("ValorDespesas", "sum"),
-        MediaTrimestral=("ValorDespesas", "mean"),
-        DesvioPadrao=("ValorDespesas", "std")
-    )
-    .reset_index()
+# DEBUG (pode remover depois)
+print("Colunas após o merge:")
+print(df.columns)
+
+# =========================
+# 4. Tratamento do valor da despesa
+# =========================
+df["ValorDespesa"] = pd.to_numeric(
+    df["ValorDespesa"],
+    errors="coerce"
 )
 
-# ==========================
-# 6. Ordenação
-# ==========================
-df_agregado = df_agregado.sort_values(
-    by="TotalDespesas",
-    ascending=False
+# =========================
+# 5. Validações exigidas pelo enunciado
+# =========================
+
+# Remover registros sem valor de despesa
+df = df[df["ValorDespesa"].notna()]
+
+# Remover registros sem Razão Social válida
+df = df[
+    df["RazaoSocial"].notna() &
+    (df["RazaoSocial"].str.strip() != "")
+]
+
+# =========================
+# 6. Consolidação (exemplo: soma por operadora)
+# =========================
+resultado = (
+    df.groupby(
+        ["CNPJ", "RazaoSocial", "RegistroANS", "Modalidade", "UF"],
+        as_index=False
+    )["ValorDespesa"]
+    .sum()
+    .rename(columns={"ValorDespesa": "TotalDespesas"})
 )
 
-# ==========================
-# 7. Exportação final
-# ==========================
-df_agregado.to_csv("despesas_agregadas.csv", index=False)
+# =========================
+# 7. Exportação do resultado final
+# =========================
+resultado.to_csv(
+    os.path.join(BASE_DIR, "resultado_final.csv"),
+    sep=";",
+    index=False,
+    encoding="latin1"
+)
 
-print("Processamento concluído com sucesso.")
+print("Processamento concluído com sucesso!")
+print("Arquivo gerado: resultado_final.csv")
