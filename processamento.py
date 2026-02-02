@@ -60,3 +60,16 @@ df = df.merge(
 )
 
 # ==========================
+# 5. Agregações
+# ==========================
+df_agregado = (
+    df.groupby(["RazaoSocial", "UF"])
+    .agg(
+        TotalDespesas=("ValorDespesas", "sum"),
+        MediaTrimestral=("ValorDespesas", "mean"),
+        DesvioPadrao=("ValorDespesas", "std")
+    )
+    .reset_index()
+)
+
+
