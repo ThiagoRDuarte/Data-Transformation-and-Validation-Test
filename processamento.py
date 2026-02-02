@@ -29,4 +29,25 @@ df = pd.read_csv("consolidado_despesas.csv")
 df["CNPJ"] = df["CNPJ"].astype(str)
 df["ValorDespesas"] = pd.to_numeric(df["ValorDespesas"], errors="coerce")
 
+# ==========================
+# 2. Validações de dados
+# ==========================
+df = df[df["CNPJ"].apply(validar_cnpj)]
+df = df[df["ValorDespesas"] > 0]
+df = df[df["RazaoSocial"].notna() & (df["RazaoSocial"].str.strip() != "")]
 
+# ==========================
+# 3. Leitura dos dados cadastrais
+# ==========================
+cadastro = pd.read_csv(
+    "operadoras_ativas.csv",
+    sep=";",
+    encoding="latin1"
+)
+
+cadastro["CNPJ"] = cadastro["CNPJ"].astype(str)
+
+# Remove duplicidades mantendo o primeiro registro
+cadastro = cadastro.drop_duplicates(subset="CNPJ")
+
+# ==========================
