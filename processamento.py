@@ -72,4 +72,17 @@ df_agregado = (
     .reset_index()
 )
 
+# ==========================
+# 6. Ordenação
+# ==========================
+df_agregado = df_agregado.sort_values(
+    by="TotalDespesas",
+    ascending=False
+)
 
+# ==========================
+# 7. Exportação final
+# ==========================
+df_agregado.to_csv("despesas_agregadas.csv", index=False)
+
+print("Processamento concluído com sucesso.")
