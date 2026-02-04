@@ -13,6 +13,9 @@ O processamento parte do **CSV consolidado no Teste 1.3**.
 * Python 3
 * pandas
 * Arquivos CSV
+* PostGre SQL
+* PSQL
+* PgAdmin4
 
 ---
 
@@ -87,6 +90,179 @@ Dados cadastrais das operadoras ativas (ANS):
 ## RESULTADO
 
 A solução atende integralmente ao enunciado, com foco em **qualidade dos dados**, **consistência** e **clareza técnica**, documentando explicitamente todas as decisões e trade-offs exigidos pelo teste.
+
+---
+
+## TESTE DE BANCO E ANÁLISE
+
+## 📌 Objetivo
+
+Implementar um pipeline de dados capaz de:
+- Modelar corretamente as entidades do domínio
+- Importar arquivos CSV
+- Garantir integridade referencial
+- Consolidar e agregar informações financeiras
+- Gerar métricas estatísticas para análise
+
+## 🗂 Estrutura de Dados
+
+### Tabela: `operadoras`
+Armazena os dados cadastrais das operadoras.
+
+| Campo | Tipo |
+|------|-----|
+| cnpj | VARCHAR(14) (PK) |
+| razao_social | TEXT |
+| registro_ans | VARCHAR |
+| modalidade | VARCHAR |
+| uf | CHAR(2) |
+
+---
+
+### Tabela: `despesas_consolidadas`
+Armazena as despesas financeiras associadas às operadoras.
+
+| Campo | Tipo |
+|------|-----|
+| id | SERIAL (PK) |
+| cnpj | VARCHAR(14) (FK) |
+| ano | INTEGER |
+| trimestre | INTEGER |
+| valor_despesas | DECIMAL |
+
+---
+
+### Tabela: `despesas_agregadas`
+Tabela analítica gerada a partir da consolidação dos dados.
+
+| Campo | Tipo |
+|------|-----|
+| id | SERIAL (PK) |
+| razao_social | TEXT |
+| uf | CHAR(2) |
+| total_despesas | DECIMAL |
+| media_trimestral | DECIMAL |
+| desvio_padrao | DECIMAL |
+
+---
+
+## 🔄 Pipeline de Processamento (ETL)
+
+1. **Criação das tabelas (DDL)**
+2. **Carga dos CSVs**
+   - Uso de `\copy` para importação
+   - Delimitador `;`
+3. **Staging**
+   - Utilização de tabela temporária para validação e conversão de dados
+4. **Transformação**
+   - Conversão de tipos
+   - Validação de chaves estrangeiras
+5. **Agregação**
+   - JOIN entre operadoras e despesas
+   - Cálculo de soma, média e desvio padrão
+6. **Persistência**
+   - Inserção final na tabela `despesas_agregadas`
+
+---
+
+## ⚖️ Trade-offs Técnicos
+
+### 1️⃣ Uso de tabela temporária (TEMP TABLE)
+
+**Decisão:** Utilizar tabela temporária como staging antes da inserção definitiva.
+
+**Vantagens:**
+- Permite validação e tratamento de dados antes da persistência
+- Evita corromper tabelas finais com dados inconsistentes
+- Simula um pipeline de ETL real
+
+**Desvantagens:**
+- Escopo limitado à sessão
+- Exige execução do processo em uma única conexão
+
+**Justificativa:**  
+Foi escolhida por refletir boas práticas de ETL e controle de qualidade de dados.
+
+---
+
+### 2️⃣ Integridade referencial via Foreign Key
+
+**Decisão:** Manter `FOREIGN KEY` entre `despesas_consolidadas` e `operadoras`.
+
+**Vantagens:**
+- Garante consistência entre despesas e operadoras
+- Evita registros órfãos
+- Facilita validação automática pelo banco
+
+**Desvantagens:**
+- Pode bloquear inserções caso existam inconsistências no CSV
+- Requer ordem correta de carga
+
+**Justificativa:**  
+A integridade dos dados foi priorizada em detrimento da flexibilidade de carga.
+
+---
+
+### 3️⃣ Agregação pré-calculada em tabela física
+
+**Decisão:** Persistir os dados agregados em `despesas_agregadas`.
+
+**Vantagens:**
+- Consultas analíticas mais rápidas
+- Redução de custo computacional em leituras frequentes
+- Facilita consumo por BI ou relatórios
+
+**Desvantagens:**
+- Dados precisam ser recalculados em novas cargas
+- Possível redundância de informação
+
+**Justificativa:**  
+Adequado para cenários de leitura intensiva e análise estatística.
+
+---
+
+### 4️⃣ Uso de `\copy` ao invés de `COPY`
+
+**Decisão:** Utilizar `\copy` via `psql`.
+
+**Vantagens:**
+- Não requer permissões elevadas no servidor
+- Permite leitura de arquivos locais
+- Mais simples em ambientes de desenvolvimento
+
+**Desvantagens:**
+- Dependente do cliente
+- Menor controle sobre execução em ambientes distribuídos
+
+**Justificativa:**  
+Escolha alinhada ao contexto de execução local do teste técnico.
+
+---
+
+## 📊 Query de Geração das Despesas Agregadas
+
+```sql
+INSERT INTO despesas_agregadas (
+    razao_social,
+    uf,
+    total_despesas,
+    media_trimestral,
+    desvio_padrao
+)
+SELECT
+    o.razao_social,
+    o.uf,
+    SUM(d.valor_despesas),
+    AVG(d.valor_despesas),
+    STDDEV(d.valor_despesas)
+FROM despesas_consolidadas d
+JOIN operadoras o
+    ON o.cnpj = d.cnpj
+GROUP BY
+    o.razao_social,
+    o.uf;
+
+---
 
 ## AUTOR
 Thiago Ramos
